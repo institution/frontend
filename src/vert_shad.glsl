@@ -1,14 +1,15 @@
 #version 120
 
-attribute float mass;
-attribute vec3 pos;
+
+attribute vec3 point;
+attribute vec3 color;
 
 uniform mat4 mvp;
-uniform mat4 m_transform;
+uniform mat4 transform;
 
-varying float f_mass;
+varying vec3 f_color;
 
 void main(void) {
-	gl_Position = mvp * m_transform * vec4(pos, 1.0);
-	f_mass = mass;
+	gl_Position = mvp * transform * vec4(point, 1.0);
+	f_color = color;
 }

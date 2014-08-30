@@ -32,6 +32,25 @@ namespace gl {
 	struct Shader{
 		GLuint id{0};
 
+		Shader() {
+			assert(id == 0);
+		}
+
+		Shader(Shader const&) = delete;
+
+		Shader(Shader&& s) {
+			this->~Shader();
+			id = s.id;
+			s.id = 0;
+		}
+
+		void operator=(Shader&& s) {
+			this->~Shader();
+			id = s.id;
+			s.id = 0;
+		}
+
+
 		~Shader() {
 			if (id > 0) {
 				assert(glIsShader(id) == GL_TRUE);
@@ -43,6 +62,24 @@ namespace gl {
 
 	struct Program{
 		GLuint id{0};
+
+		Program() {
+			assert(id == 0);
+		}
+
+		Program(Program const&) = delete;
+
+		Program(Program&& s) {
+			this->~Program();
+			id = s.id;
+			s.id = 0;
+		}
+
+		void operator=(Program&& s) {
+			this->~Program();
+			id = s.id;
+			s.id = 0;
+		}
 
 		~Program() {
 			if (id > 0) {
@@ -56,6 +93,24 @@ namespace gl {
 	struct Buffer{
 		GLuint id{0};
 
+		Buffer() {
+			assert(id == 0);
+		}
+
+		Buffer(Buffer const&) = delete;
+
+		Buffer(Buffer&& s) {
+			this->~Buffer();
+			id = s.id;
+			s.id = 0;
+		}
+
+		void operator=(Buffer&& s) {
+			this->~Buffer();
+			id = s.id;
+			s.id = 0;
+		}
+
 		~Buffer() {
 			if (id > 0) {
 				//assert(glIsProgram(id) == GL_TRUE);
@@ -66,8 +121,27 @@ namespace gl {
 
 	};
 
+
+	void check() {
+		auto e = glGetError();
+		if (e != GL_NO_ERROR) {
+			std::string s;
+			switch (e) {
+				case GL_INVALID_ENUM: s = "GL_INVALID_ENUM"; break;
+				case GL_INVALID_VALUE: s = "GL_INVALID_VALUE"; break;
+				case GL_INVALID_OPERATION: s = "GL_INVALID_OPERATION"; break;
+				case GL_INVALID_FRAMEBUFFER_OPERATION: s = "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
+				case GL_OUT_OF_MEMORY: s = "GL_OUT_OF_MEMORY"; break;
+				case GL_STACK_UNDERFLOW: s = "GL_STACK_UNDERFLOW"; break;
+				case GL_STACK_OVERFLOW: s = "GL_STACK_OVERFLOW"; break;
+				default: s = "unknown"; break;
+			}
+			throw Critical(s);
+		}
+	}
+
 	void bind_buffer(Enum type, Buffer const& b) {
-		glBindBuffer(type, b.id);
+		glBindBuffer(type, b.id); check();
 	}
 
 	void bind_buffer(Enum type) {
@@ -78,17 +152,32 @@ namespace gl {
 		glBufferData(target, size, data, usage);
 	}
 
+	template <class T>
+	void buffer_data(Enum target, std::vector<T> const& ts, Enum usage) {
+		buffer_data(target, ts.size() * sizeof(T), &ts[0], usage);
+	}
+
 	Buffer create_buffer() {
 		Buffer b;
 		glGenBuffers(1, &b.id);
 		return b;
 	}
 
+
+    bool is_program(Program const& p) {
+		return glIsProgram(p.id);
+	}
+
+	bool is_shader(Shader const& s) {
+		return glIsShader(s.id);
+	}
+
+
 	template <class T>
 	Buffer create_buffer(Enum type, std::vector<T> const& ts, Enum usage) {
 		auto b = create_buffer();
 		bind_buffer(type, b);
-		buffer_data(type, ts.size() * sizeof(T), &ts[0], usage);
+		buffer_data(type, ts, usage);
 		bind_buffer(type);
 		return b;
 	}
@@ -199,19 +288,18 @@ namespace gl {
 
 	Shader create_shader(GLenum type, std::string const& src) {
 		Shader s;
-		s.id = glCreateShader(type);
+		s.id = glCreateShader(type); check();
 
 		char const* c_src = src.c_str();
-		glShaderSource(s.id, 1, &c_src, nullptr);
-		glCompileShader(s.id);
+		glShaderSource(s.id, 1, &c_src, nullptr); check();
+		glCompileShader(s.id); check();
 
-		GLint compile_ok = GL_FALSE,
-		link_ok = GL_FALSE;
-
-		if (get_shader_iv(s, GL_COMPILE_STATUS) == 0) {
-			std::cerr << get_shader_infolog(s);
+		if (get_shader_iv(s, GL_COMPILE_STATUS) == GL_FALSE) {
+			std::cerr << get_shader_infolog(s) << std::endl;
 			throw Critical("compile shader error");
 		}
+
+		assert(is_shader(s));
 
 		return s;
 	}
@@ -220,24 +308,28 @@ namespace gl {
 
 	Program create_program() {
 		Program p;
-		p.id = glCreateProgram();
+		p.id = glCreateProgram(); check();
 		return p;
 	}
 
 
-
 	void attach_shader(Program const& p, Shader const& s) {
-		glAttachShader(p.id, s.id);
+		glAttachShader(p.id, s.id); check();
 	}
 
 	void link_program(Program const& p) {
-		glLinkProgram(p.id);
+		glLinkProgram(p.id); check();
 	}
 
 
 
 	Program create_program(Shader const& vert, Shader const& frag) {
 		auto p = create_program();
+
+		assert(is_program(p));
+		assert(is_shader(vert));
+		assert(is_shader(frag));
+
 		attach_shader(p, vert);
 		attach_shader(p, frag);
 		link_program(p);

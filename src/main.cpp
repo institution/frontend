@@ -24,6 +24,12 @@
 #include "aga2.hpp"
 #include "gl.h"
 
+#include "sysinc.h"
+#include "sys.h"
+#include "format.hpp"
+
+//using format::format;
+
 
 std::string get_file_contents(std::string const& filename)
 {
@@ -185,97 +191,84 @@ void init_glew() {
 		exit(1); // or handle the error in a nicer way
 	}
 }
-	
 
 
-int main() {
-	int screen_width = 640;
-	int screen_height = 480;
-	
-    sf::ContextSettings settings;
-	settings.depthBits = 24;
-	settings.stencilBits = 8;
-	settings.antialiasingLevel = 4;
-	settings.majorVersion = 4;
-	settings.minorVersion = 4;
-	sf::Window window(sf::VideoMode(screen_width, screen_height), "OpenGL", sf::Style::Default, settings);
 
-    window.setVerticalSyncEnabled(true);
-	
-	init_glew();
-	
-	
-	Sys sys;
-	
-	sys.create_part(v3r(-1,0,0));
-	sys.create_part(v3r(+1,0,0));
-	sys.create_part(v3r(0,+1,0));
-	
-	sys.create_link(0,1);
-	sys.create_link(1,2);
-	sys.create_link(0,2);
-	
-	
-	
-	
-	auto vert_shad = gl::create_shader(GL_VERTEX_SHADER, get_file_contents("src/vert_shad.glsl"));
-	auto frag_shad = gl::create_shader(GL_FRAGMENT_SHADER, get_file_contents("src/frag_shad.glsl"));
-	auto prog = gl::create_program(vert_shad, frag_shad);
-		
-	gl::enable(GL_BLEND);
-	gl::blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	
-	gl::enable(GL_DEPTH_TEST);
-	gl::depth_func(GL_LESS);
 
-	gl::clear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+struct View{
+	sf::Window win;
+	int screen_width{640};
+	int screen_height{480};
+	
+	gl::Shader vert_shad, frag_shad;
+	gl::Program prog;
+	
+	gl::Buffer buff;
+	
+	gl::Attrib a_point, a_color;
+	gl::Uniform u_mvp, u_transform;
+	
+	std::size_t size;
 	
 	sf::Clock clock;
 	
+	bool running{1};
 	
-	
-	
-	auto part_buff = gl::create_buffer(GL_ARRAY_BUFFER, parts, GL_STATIC_DRAW);	
-	auto link_buff = gl::create_buffer(GL_ELEMENT_ARRAY_BUFFER, sys.s_ls, GL_STATIC_DRAW);
-	
-	
-	auto a_mass = gl::get_attrib_location(prog, "mass");
-	auto a_pos = gl::get_attrib_location(prog, "pos");
-	auto a_transform = gl::get_uniform_location(prog, "m_transform");
-	auto u_mvp = gl::get_uniform_location(prog, "mvp");
-	
-	
-	
-	
-	// run the main loop
-	bool running = true;
-	while (running)
-	{
-		// handle events
-		sf::Event event;
-		while (window.pollEvent(event))
-		{
-			if (event.type == sf::Event::Closed)
-			{
-				// end the program
-				running = false;
-			}
-			else if (event.type == sf::Event::Resized)
-			{
-				screen_width = event.size.width;
-				screen_height = event.size.height;
-					
-				gl::viewport(0, 0, screen_width, screen_height);
+	void init() {
+		sf::ContextSettings settings;
+		settings.depthBits = 24;
+		settings.stencilBits = 8;
+		settings.antialiasingLevel = 4;
+		settings.majorVersion = 4;
+		settings.minorVersion = 4;
+		win.create(sf::VideoMode(screen_width, screen_height), "OpenGL", sf::Style::Default, settings);
+
+		win.setVerticalSyncEnabled(true);
+
+		init_glew();
+		
+		
+		vert_shad = gl::create_shader(GL_VERTEX_SHADER, get_file_contents("src/vert_shad.glsl"));
+		frag_shad = gl::create_shader(GL_FRAGMENT_SHADER, get_file_contents("src/frag_shad.glsl"));
+		prog = gl::create_program(vert_shad, frag_shad);
+		
+		gl::use_program(prog);
+		
+		buff = gl::create_buffer();	
 				
-			}
-		}
+		a_point = gl::get_attrib_location(prog, "point");
+		a_color = gl::get_attrib_location(prog, "color");
+		
+		u_transform = gl::get_uniform_location(prog, "transform");		
+		u_mvp = gl::get_uniform_location(prog, "mvp");
 		
 		
+	}
+	
+	
+	void copy(std::vector<float> const& data) {
+		// point1, color1, point2, color2, ... 
+		size = data.size() / 6;
+		gl::bind_buffer(GL_ARRAY_BUFFER, buff);
+		gl::buffer_data(GL_ARRAY_BUFFER, data, GL_DYNAMIC_DRAW);
+		gl::bind_buffer(GL_ARRAY_BUFFER);
+		
+		
+	}
+
+	void draw() {
+		
+		gl::bind_buffer(GL_ARRAY_BUFFER, buff);
+		
+		// mvp
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 0.0, -4.0));
 		glm::mat4 view = glm::lookAt(glm::vec3(0.0, 0.5, 0.0), glm::vec3(0.0, 0.0, -4.0), glm::vec3(0.0, 1.0, 0.0));
 		glm::mat4 projection = glm::perspective(45.0f, 1.0f*screen_width/screen_height, 0.1f, 10.0f);
 		glm::mat4 mvp = projection * view * model;
 		
+		gl::uniform_matrix4f(u_mvp, glm::value_ptr(mvp));
+		
+		// transform
 		auto sec = clock.getElapsedTime().asSeconds();
 		
 		auto r = aga3::rotor(
@@ -287,67 +280,160 @@ int main() {
 		auto trans_mat = translate_matrix4(v3f(float(0.1 * sec), 0, 0));
 		auto mat = glm::mat4(1.0f);
 		
-		//gl::uniform_matrix4f(a_transform, glm::value_ptr(mat));		
-		gl::uniform_matrix4f(a_transform, &rotat_mat[0]);
-		gl::uniform_matrix4f(u_mvp, glm::value_ptr(mvp));
+		gl::uniform_matrix4f(u_transform, &rotat_mat[0]);
 		
-		
-		// draw...
-		/*
-		vector<int> es;
-		es.push_back(0);
-		es.push_back(1);
-		es.push_back(2);*/
-
-		// clear the buffers
-		gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		
-		gl::use_program(prog);
-
-		/*
-		gl::enable_vertex_attrib_array(a_mass);
-		gl::bind_buffer(GL_ARRAY_BUFFER, part_buff);
+		// point
+		gl::enable_vertex_attrib_array(a_point);
 		gl::vertex_attrib_pointer(
-			a_mass,   // attribute
-			1,         // number of elements per vertex, here (x,y)
-			GL_FLOAT,  // the type of each element
-			GL_FALSE,  // take our values as-is
-			6,         // no extra data between each position
-			0          // offset of first element
+			a_point,           // attribute index
+			3,                 // number of elements per vertex [1,2,3,4]
+			GL_FLOAT,          // the type of each element 
+			GL_FALSE,          // normalize
+			sizeof(float)*6,   // byte offset beetween elements or 0 (tightly packed)
+			(void*)0           // byte offset of first element
 		);
-		*/
 		
-		gl::enable_vertex_attrib_array(a_pos);
-		gl::bind_buffer(GL_ARRAY_BUFFER, part_buff);
+		// color
+		gl::enable_vertex_attrib_array(a_color);
 		gl::vertex_attrib_pointer(
-			a_pos,             // attribute
-			3,                 // number of elements per vertex
-			GL_FLOAT,          // the type of each element
-			GL_FALSE,          // take our values as-is
-			0,                 // extra data between each position
-			(void*)0           // offset of first element
+			a_color,           // attribute index
+			3,                 // number of elements per vertex [1,2,3,4]
+			GL_FLOAT,          // the type of each element 
+			GL_FALSE,          // normalize
+			sizeof(float)*6,   // byte offset beetween elements or 0 (tightly packed)
+			(void*)(sizeof(float)*3) // byte offset of first element
 		);
+		
+		
+		
+		// render
+		gl::enable(GL_BLEND);
+		gl::blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		gl::enable(GL_DEPTH_TEST);
+		gl::depth_func(GL_LESS);
+
+		gl::clear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+	
+		std::cout << format::format("draw; size=%||\n", size);
+		gl::draw_arrays(GL_LINES, 0, size);
+		
+		
+		
+		gl::disable_vertex_attrib_array(a_color);
+		gl::disable_vertex_attrib_array(a_point);
 		
 		gl::bind_buffer(GL_ARRAY_BUFFER);
+		
+		win.display();
+	}
+	
+	
+	void handle_events() {
+		sf::Event event;
+		while (win.pollEvent(event))
+		{
+			if (event.type == sf::Event::Closed)
+			{
+				// end the program
+				running = false;
+			}
+			else if (event.type == sf::Event::Resized)
+			{
+				screen_width = event.size.width;
+				screen_height = event.size.height;
+					
+				gl::viewport(0, 0, screen_width, screen_height);				
+			}
+		}
+	}
+		
+	
+	
+};
 
-		gl::bind_buffer(GL_ELEMENT_ARRAY_BUFFER, link_buff);
-		auto size = gl::get_buffer_parameter_iv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE);
-		gl::draw_elements(GL_LINES, size/sizeof(std::uint32_t), GL_UNSIGNED_INT, 0);
-		gl::bind_buffer(GL_ELEMENT_ARRAY_BUFFER);
-		
-		//gl::bind_buffer(GL_ARRAY_BUFFER, part_buff);
-		//gl::draw_arrays(GL_TRIANGLES, 0, 10);
-		//gl::bind_buffer(GL_ARRAY_BUFFER);
-		
-		
-		
-		
-		gl::disable_vertex_attrib_array(a_pos);
-		gl::disable_vertex_attrib_array(a_mass);
 
-		// end the current frame (internally swaps the front and back buffers)
-		window.display();
+void emit(std::vector<float> & prep, v3r const& v, v3r const& c) {
+	prep.push_back(v[0]);
+	prep.push_back(v[1]);
+	prep.push_back(v[2]);
+	
+	prep.push_back(c[0]);
+	prep.push_back(c[1]);
+	prep.push_back(c[2]);
+}
+	
+
+int main() {
+
+	using namespace sys;
+	
+	
+	Sys sys;
+	
+	sys.create_part(v3r(-1,0,0));
+	sys.create_part(v3r(+1,0,0));
+	sys.create_part(v3r(0,+1,0));
+	
+	sys.create_link(0,1, 2.2);
+	sys.create_link(1,2, 1);
+	sys.create_link(0,2, 0.9);
+	
+	
+	View view;
+	view.init();
+	
+	
+	std::vector<float> prep;
+	
+	std::vector<v3r> fs;
+	
+	// run the main loop
+	while (view.running)
+	{
+		// handle events
+		view.handle_events();
+		
+		// update
+		calc_forces(fs, sys);
+		
+		// prep buffer
+		prep.clear();
+		prep.reserve(sys.links.size() * 4 * 3);
+		
+		for (auto& link: sys.links) {
+			auto& part_i = sys.parts.at(link.i);
+			auto& part_j = sys.parts.at(link.j);
+			
+			// point 1, color 1
+			emit(prep, part_i.p, v3r(1,1,1));
+			
+			// point 2, color 2
+			emit(prep, part_j.p, v3r(1,1,1));
+			
+		}
+		
+		
+		for (size_t i = 0; i < fs.size(); ++i) {
+			
+			auto& p1 = sys.parts.at(i).p;
+			auto p2 = p1 + fs.at(i);
+			
+			emit(prep, p1, v3r(0.8, 0.2, 0.8));
+			emit(prep, p2, v3r(0.8, 0.2, 0.8));
+			
+		}
+		
+		
+
+		//calc_forces(fs, sys);
+		view.copy(prep);
+		
+		
+		// draw
+		view.draw();
+		
+		
 	}
 
 	

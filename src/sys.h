@@ -8,6 +8,7 @@ namespace sys{
 
 	using Real = float;
 	using v3r = aga3::Mv1<Real>;
+	using s1r = aga3::Mv0<Real>;
 
 	using PartId = uint16;
 	using LinkId = uint16;
@@ -18,6 +19,7 @@ namespace sys{
 		(PartId, j)
 		(Real, c)
 		(Real, k)
+		(Real, l)
 	)
 
 
@@ -38,10 +40,20 @@ namespace sys{
 			return parts.size() - 1;
 		}
 
-		LinkId create_link(PartId i, PartId j) {
-			links.push_back({i,j, 0.5, 0.5});
+
+		LinkId create_link(PartId i, PartId j, Real l) {
+			links.push_back({i, j, Real(0.5), Real(0.5), l});
 			return links.size() - 1;
 		}
+
+		LinkId create_link(PartId i, PartId j) {
+			auto pi = parts.at(i).p;
+			auto pj = parts.at(j).p;
+			Real l = sqrt((pi - pj)|(pi - pj));
+			return create_link(i, j, l);
+		}
+
+
 
 		PartId get_num_part() {
 			return parts.size();
@@ -55,16 +67,18 @@ namespace sys{
 
 
 
-	vector<v3r> calc_forces(Sys const& sys) {
+	 std::vector<v3r> & calc_forces(std::vector<v3r> & fs, Sys const& sys) {
 
 		auto& parts = sys.parts;
 		auto& links = sys.links;
 
-		vector<v3r> fs;
 		fs.assign(parts.size(), {0,0,0});
 
 		for (auto& link: links) {
 			auto i = link.i;
+			auto j = link.j;
+
+			auto lij = link.l;
 
 			auto const& part_i = parts.at(link.i);
 			auto const& part_j = parts.at(link.j);
@@ -73,18 +87,21 @@ namespace sys{
 			auto const& pj = part_j.p;
 
 			auto const& qi = part_i.q;
+			auto const& qj = part_j.q;
 
 			auto kij = link.k;
 			auto cij = link.c;
 
 			auto dp = pi - pj;
-			auto d2 = dp * dp;
-			auto d = sqrt(dp2);
+			auto d2 = aga3::inn2(dp);
+			auto d = sqrt(d2);
 
-			auto mm = (kij * (1 - lij/d)) + (cij * (qi|dp) / d2);
-			auto f = - mm * dp;
+			Real spring = (kij * (1 - lij/d));
+			Real dump_i = (cij * (qi|dp) / d2);
+			Real dump_j = (cij * (qj|dp) / d2);
 
-			fs.at(i) += f;
+			fs.at(i) += (-spring - dump_i) * dp;
+			fs.at(j) += (+spring - dump_j) * dp;
 		}
 
 		return fs;

@@ -980,6 +980,67 @@ Mv0<R> operator*(Mv3<R> const& x, Mv3<R> const& y) {
     return Mv0<R>((-1 * x[0] * y[0]));
 }
 
+// mul when one arg is Scalar
+template <class R>
+Mv1<R> operator*(R const& x, Mv1<R> const& y) {
+
+    return Mv1<R>((x * y[0]), (x * y[1]), (x * y[2]));
+}
+
+template <class R>
+Mv2<R> operator*(R const& x, Mv2<R> const& y) {
+
+    return Mv2<R>((x * y[0]), (x * y[1]), (x * y[2]));
+}
+
+template <class R>
+Mv02<R> operator*(R const& x, Mv02<R> const& y) {
+
+    return Mv02<R>((x * y), (x * y[1]), (x * y[2]), (x * y[3]));
+}
+
+template <class R>
+Mv13<R> operator*(R const& x, Mv13<R> const& y) {
+
+    return Mv13<R>((x * y[0]), (x * y[1]), (x * y[2]), (x * y[3]));
+}
+
+template <class R>
+Mv3<R> operator*(R const& x, Mv3<R> const& y) {
+
+    return Mv3<R>((x * y[0]));
+}
+
+template <class R>
+Mv1<R> operator*(Mv1<R> const& x, R const& y) {
+
+    return Mv1<R>((x[0] * y), (x[1] * y), (x[2] * y));
+}
+
+template <class R>
+Mv2<R> operator*(Mv2<R> const& x, R const& y) {
+
+    return Mv2<R>((x[0] * y), (x[1] * y), (x[2] * y));
+}
+
+template <class R>
+Mv02<R> operator*(Mv02<R> const& x, R const& y) {
+
+    return Mv02<R>((x * y), (x[1] * y), (x[2] * y), (x[3] * y));
+}
+
+template <class R>
+Mv13<R> operator*(Mv13<R> const& x, R const& y) {
+
+    return Mv13<R>((x[0] * y), (x[1] * y), (x[2] * y), (x[3] * y));
+}
+
+template <class R>
+Mv3<R> operator*(Mv3<R> const& x, R const& y) {
+
+    return Mv3<R>((x[0] * y));
+}
+
 // inner product
 template <class R>
 Mv0<R> operator|(Mv1<R> const& x, Mv1<R> const& y) {
