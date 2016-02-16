@@ -1,441 +1,318 @@
-#include <fstream>
-#include <string>
-#include <cerrno>
-#include <stdexcept>
-#include <cmath>
-#include <array>
-#include <cstdint>
+//#define GLM_FORCE_RADIANS
+//#include <glm/glm.hpp>
+//#include <glm/gtc/matrix_transform.hpp>
+//#include <glm/gtc/type_ptr.hpp>
 
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+
+#include <stdexcept>
+#include <SDL2/SDL.h>
+#include "ext/ext.hpp"
 
 #include <GL/glew.h>
 
 
-#include <boost/fusion/include/define_struct.hpp>
-#include <boost/fusion/include/define_struct_inline.hpp>
-
-//#include <SFML/OpenGL.hpp>
-#include <SFML/Window.hpp>
-
-#include "aga3.hpp"
-#include "aga2.hpp"
-#include "gl.h"
-
-#include "sysinc.h"
-#include "sys.h"
-#include "format.hpp"
-
-//using format::format;
-
-
-std::string get_file_contents(std::string const& filename)
-{
-	std::ifstream in(filename, std::ios::in | std::ios::binary);
-	if (in)
-	{
-		std::string contents;
-		in.seekg(0, std::ios::end);
-		contents.resize(in.tellg());
-		in.seekg(0, std::ios::beg);
-		in.read(&contents[0], contents.size());
-		in.close();
-		return(contents);
-	}
-	throw(errno);
-}
-
-
-template <class T>
-struct Color {
-	T r, g, b, a;
-	Color() {}
-	Color(T r, T g, T b, T a = 0): r(r), g(g), b(b), a(a) {}
-
-	template<class A>
-	void serialize(A & ar, uint const& version) {
-		ar & r;
-		ar & g;
-		ar & b;
-		ar & a;
-	}
-};
-
-using Real = float;
-using v3f = aga3::Mv1<Real>;
-using v2f = aga2::Mv1<Real>;
-using c4f = Color<Real>;
-using r3f = aga3::Mv02<Real>;
-
-using v3r = aga3::Mv1<Real>;
-using v2r = aga2::Mv1<Real>;
-using c4r = Color<Real>;
-using r3r = aga3::Mv02<Real>;
-
-
-/*
-([(-1, -1, -1),
-  (1, -1, -1),
-  (-1, 1, -1),
-  (1, 1, -1),
-  (-1, -1, 1),
-  (1, -1, 1),
-  (-1, 1, 1),
-  (1, 1, 1)],
- [(0, 1),
-  (2, 3),
-  (0, 2),
-  (1, 3),
-  (4, 5),
-  (6, 7),
-  (4, 6),
-  (5, 7),
-  (0, 4),
-  (1, 5),
-  (2, 6),
-  (3, 7)])
-*/
-	 
-	
-template <class T>
-auto rotate_matrix4(aga3::Mv02<T> const& r) -> std::array<T, 16> {
-	// Convert rotor3 to glMatrix4.
-	// rotor -- multivector
-	// return -- opengl (loadable to matrix) list
-	// [dorst] chapter 7.10.4
-	
-	auto w = r[0];
-	auto z = r[1];
-	auto x = r[2];
-	auto y = r[3];
-
-	return std::array<T, 16>({
-		T(1.-2.*y*y-2.*z*z), T(2.*x*y-2.*w*z),    T(2.*x*z+2.*w*y),    T(0.),
-		T(2.*y*x+2.*w*z),    T(1.-2.*z*z-2.*x*x), T(2.*y*z-2.*w*x),    T(0.),
-		T(2.*z*x-2.*w*y),    T(2.*z*y+2.*w*x),    T(1.-2.*x*x-2.*y*y), T(0.),
-		T(0.),               T(0.),               T(0.),               T(1.),
-	});
-}
-
-template <class T>
-auto translate_matrix4(aga3::Mv1<T> const& r) -> std::array<T, 16> {
-	auto x = r[0];
-	auto y = r[1];
-	auto z = r[2];
-	
-	return std::array<T, 16>({
-		T(1), T(0), T(0), T(0),
-		T(0), T(1), T(0), T(0),
-		T(0), T(0), T(1), T(0),
-		T(x), T(y), T(z), T(1),
-	});
-}
-
-
-template <class T>
-auto imul(T t0, T t1, T t2, T t3, T y0, T y1, T y2, T y3) -> T {
-	return t0*y0 + t1*y1 + t2+y2 + t3*y3;
-}
-
-
-template <class T>
-auto mul(std::array<T, 16> const& a, std::array<T, 16> const& b) -> std::array<T, 16> {
-	
-	//0  1  2  3
-	//4  5  6  7
-	//8  9  10 11
-	//12 13 14 15
-		
-	std::array<T, 16> r;
-	
-	r[0] = imul(a[0], a[4], a[8], a[12], b[0], b[1], b[2], b[3]);
-	r[4] = imul(a[0], a[4], a[8], a[12], b[4], b[5], b[6], b[7]);
-	r[8] = imul(a[0], a[4], a[8], a[12], b[8], b[9], b[10], b[11]);
-	r[12] = imul(a[0], a[4], a[8], a[12], b[12], b[13], b[14], b[15]);
-	
-	r[1] = imul(a[1], a[5], a[9], a[13], b[0], b[1], b[2], b[3]);
-	r[5] = imul(a[1], a[5], a[9], a[13], b[4], b[5], b[6], b[7]);
-	r[9] = imul(a[1], a[5], a[9], a[13], b[8], b[9], b[10], b[11]);
-	r[13] = imul(a[1], a[5], a[9], a[13], b[12], b[13], b[14], b[15]);
-		 
-	r[2] = imul(a[2], a[6], a[10], a[14], b[0], b[1], b[2], b[3]);
-	r[6] = imul(a[2], a[6], a[10], a[14], b[4], b[5], b[6], b[7]);
-	r[10] = imul(a[2], a[6], a[10], a[14], b[8], b[9], b[10], b[11]);
-	r[14] = imul(a[2], a[6], a[10], a[14], b[12], b[13], b[14], b[15]);
-	
-	r[3] = imul(a[3], a[7], a[11], a[15], b[0], b[1], b[2], b[3]);
-	r[7] = imul(a[3], a[7], a[11], a[15], b[4], b[5], b[6], b[7]);
-	r[11] = imul(a[3], a[7], a[11], a[15], b[8], b[9], b[10], b[11]);
-	r[15] = imul(a[3], a[7], a[11], a[15], b[12], b[13], b[14], b[15]);
-		 
-	return r;
-}
-
-
-
-
-
-
-
-
 void init_glew() {
-	GLenum err = glewInit();
-	if (err != GLEW_OK) {
-		//glewGetErrorString(err)
-		throw std::runtime_error("aaa");
+	// GL_INVALUD_ENUM bug
+	glewExperimental=GL_TRUE;
+	
+	auto x = glewInit();
+	if (x != GLEW_OK) {
+		print(std::cerr, "ERROR: GLEW: %||\n", glewGetErrorString(x));
+		std::exit(-1);
+	}
+
+	// GL_INVALUD_ENUM bug
+	auto err = glGetError();
+	switch (err) {
+		case GL_INVALID_ENUM:
+			//print(std::cerr, "INFO: glewInit: GL_INVALID_ENUM\n");
+			break;
+		case GL_NO_ERROR:
+			break;
+		default:
+			ext::fail("unexpected error\n");
 	}
 	
-	if (!GLEW_VERSION_4_4) {
-		exit(1); // or handle the error in a nicer way
+}
+
+
+char const* get_gl_err_msg(GLuint x) {
+	#define CASE_ERR(X) case X: return #X
+	switch(x) {
+		CASE_ERR(GL_NO_ERROR);
+		CASE_ERR(GL_INVALID_ENUM);
+		CASE_ERR(GL_INVALID_VALUE);
+		CASE_ERR(GL_INVALID_OPERATION);
+		CASE_ERR(GL_INVALID_FRAMEBUFFER_OPERATION);
+		CASE_ERR(GL_OUT_OF_MEMORY);
+		CASE_ERR(GL_STACK_UNDERFLOW);
+		CASE_ERR(GL_STACK_OVERFLOW);
 	}
+	#undef CASE_ERR
+	return "unknown opengl error code";
+}
+
+#define CHECK_GL() \
+	check_gl(__FILE__, __LINE__) 
+
+void check_gl(char const* fname, int line=0) {
+	auto x = glGetError();
+	if (x != GL_NO_ERROR) {
+		do {
+			print(std::cerr, "ERROR at [%||:%||]: %|| (code %||)\n", fname, line, get_gl_err_msg(x), x);
+			x = glGetError();
+		} while (x != GL_NO_ERROR);		
+		assert(0);
+		std::exit(-1);
+	}
+}
+
+
+void myLinkProgram(GLuint program) {
+	glLinkProgram(program);
+
+	GLint linked;
+	glGetProgramiv(program, GL_LINK_STATUS, &linked);
+
+	if (!linked)
+	{
+		GLint len = 0;
+		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
+
+		char log[len];
+
+		glGetProgramInfoLog(program, len, nullptr, log);
+		ext::fail("Error while linking program: %||\n", log);
+	}
+}
+
+void myLoadShader(GLuint shader, char const* shader_src)
+{
+	glShaderSource(shader, 1, &shader_src, nullptr);
+	CHECK_GL();	
+	glCompileShader(shader);
+	CHECK_GL();	
+	
+	GLint compiled;	
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+	CHECK_GL();
+
+	if (!compiled)
+	{
+		GLint len = 0;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
+		CHECK_GL();
+
+		char log[len];
+		
+		glGetShaderInfoLog(shader, len, nullptr, log);
+		CHECK_GL();	
+
+		print(std::cerr, shader_src);
+		ext::fail("Error while compiling shader: %||\n", log);
+	}
+
+	
+	
+}
+
+
+void myShowShader(GLuint shader) {
+	GLint len = 0;
+	glGetShaderiv(shader, GL_SHADER_SOURCE_LENGTH, &len);
+	char * buf = new char[len];
+
+	glGetShaderSource(shader, len, nullptr, buf);
+
+	print(buf);
+
+	delete buf;
+	
 }
 
 
 
 
-struct View{
-	sf::Window win;
-	int screen_width{640};
-	int screen_height{480};
-	
-	gl::Shader vert_shad, frag_shad;
-	gl::Program prog;
-	
-	gl::Buffer buff;
-	
-	gl::Attrib a_point, a_color;
-	gl::Uniform u_mvp, u_transform;
-	
-	std::size_t size;
-	
-	sf::Clock clock;
-	
-	bool running{1};
-	
-	void init() {
-		sf::ContextSettings settings;
-		settings.depthBits = 24;
-		settings.stencilBits = 8;
-		settings.antialiasingLevel = 4;
-		settings.majorVersion = 4;
-		settings.minorVersion = 4;
-		win.create(sf::VideoMode(screen_width, screen_height), "OpenGL", sf::Style::Default, settings);
 
-		win.setVerticalSyncEnabled(true);
-
-		init_glew();
-		
-		
-		vert_shad = gl::create_shader(GL_VERTEX_SHADER, get_file_contents("src/vert_shad.glsl"));
-		frag_shad = gl::create_shader(GL_FRAGMENT_SHADER, get_file_contents("src/frag_shad.glsl"));
-		prog = gl::create_program(vert_shad, frag_shad);
-		
-		gl::use_program(prog);
-		
-		buff = gl::create_buffer();	
-				
-		a_point = gl::get_attrib_location(prog, "point");
-		a_color = gl::get_attrib_location(prog, "color");
-		
-		u_transform = gl::get_uniform_location(prog, "transform");		
-		u_mvp = gl::get_uniform_location(prog, "mvp");
-		
-		
+void check_sdl() {
+	if (SDL_GetError()[0]) {
+		print(std::cerr, "Error: SDL: %||\n", SDL_GetError());
+		SDL_Quit();
+		std::exit(1);		
 	}
-	
-	
-	void copy(std::vector<float> const& data) {
-		// point1, color1, point2, color2, ... 
-		size = data.size() / 6;
-		gl::bind_buffer(GL_ARRAY_BUFFER, buff);
-		gl::buffer_data(GL_ARRAY_BUFFER, data, GL_DYNAMIC_DRAW);
-		gl::bind_buffer(GL_ARRAY_BUFFER);
-		
-		
-	}
-
-	void draw() {
-		
-		gl::bind_buffer(GL_ARRAY_BUFFER, buff);
-		
-		// mvp
-		glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0, 0.0, -4.0));
-		glm::mat4 view = glm::lookAt(glm::vec3(0.0, 0.5, 0.0), glm::vec3(0.0, 0.0, -4.0), glm::vec3(0.0, 1.0, 0.0));
-		glm::mat4 projection = glm::perspective(45.0f, 1.0f*screen_width/screen_height, 0.1f, 10.0f);
-		glm::mat4 mvp = projection * view * model;
-		
-		gl::uniform_matrix4f(u_mvp, glm::value_ptr(mvp));
-		
-		// transform
-		auto sec = clock.getElapsedTime().asSeconds();
-		
-		auto r = aga3::rotor(
-			aga3::e0 ^ aga3::e1, 
-			float(((2.0 * M_PI) / 30.0) * sec)
-		);
-		
-		auto rotat_mat = rotate_matrix4(r);
-		auto trans_mat = translate_matrix4(v3f(float(0.1 * sec), 0, 0));
-		auto mat = glm::mat4(1.0f);
-		
-		gl::uniform_matrix4f(u_transform, &rotat_mat[0]);
-		
-		// point
-		gl::enable_vertex_attrib_array(a_point);
-		gl::vertex_attrib_pointer(
-			a_point,           // attribute index
-			3,                 // number of elements per vertex [1,2,3,4]
-			GL_FLOAT,          // the type of each element 
-			GL_FALSE,          // normalize
-			sizeof(float)*6,   // byte offset beetween elements or 0 (tightly packed)
-			(void*)0           // byte offset of first element
-		);
-		
-		// color
-		gl::enable_vertex_attrib_array(a_color);
-		gl::vertex_attrib_pointer(
-			a_color,           // attribute index
-			3,                 // number of elements per vertex [1,2,3,4]
-			GL_FLOAT,          // the type of each element 
-			GL_FALSE,          // normalize
-			sizeof(float)*6,   // byte offset beetween elements or 0 (tightly packed)
-			(void*)(sizeof(float)*3) // byte offset of first element
-		);
-		
-		
-		
-		// render
-		gl::enable(GL_BLEND);
-		gl::blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-		gl::enable(GL_DEPTH_TEST);
-		gl::depth_func(GL_LESS);
-
-		gl::clear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-	
-		std::cout << format::format("draw; size=%||\n", size);
-		gl::draw_arrays(GL_LINES, 0, size);
-		
-		
-		
-		gl::disable_vertex_attrib_array(a_color);
-		gl::disable_vertex_attrib_array(a_point);
-		
-		gl::bind_buffer(GL_ARRAY_BUFFER);
-		
-		win.display();
-	}
-	
-	
-	void handle_events() {
-		sf::Event event;
-		while (win.pollEvent(event))
-		{
-			if (event.type == sf::Event::Closed)
-			{
-				// end the program
-				running = false;
-			}
-			else if (event.type == sf::Event::Resized)
-			{
-				screen_width = event.size.width;
-				screen_height = event.size.height;
-					
-				gl::viewport(0, 0, screen_width, screen_height);				
-			}
-		}
-	}
-		
-	
-	
-};
-
-
-void emit(std::vector<float> & prep, v3r const& v, v3r const& c) {
-	prep.push_back(v[0]);
-	prep.push_back(v[1]);
-	prep.push_back(v[2]);
-	
-	prep.push_back(c[0]);
-	prep.push_back(c[1]);
-	prep.push_back(c[2]);
 }
+
+
+
+char const* src_vert_shader = R"QWERTY(
+	#version 300 es                          
+
+	precision mediump float;
+
+	layout(location = 0) in vec4 vPosition;
 	
+	void main()                              
+	{                                        
+	   gl_Position = vPosition;              
+	}                                        
+)QWERTY";
+
+char const* src_frag_shader = R"QWERTY(
+	#version 300 es
+	precision mediump float;
+	out vec4 fragColor;                          
+	void main()                                  
+	{                                            
+	   fragColor = vec4 ( 1.0, 0.0, 0.0, 0.8 );  
+	}                                            
+)QWERTY";
+
+
+void myAttachShaders(GLuint prog, char const* src_vert_shader, char const* src_frag_shader)
+{
+	auto vs = glCreateShader(GL_VERTEX_SHADER);
+	CHECK_GL();
+	
+	auto fs = glCreateShader(GL_FRAGMENT_SHADER);
+	CHECK_GL();	
+
+	glAttachShader(prog, vs);
+	glAttachShader(prog, fs);
+
+	myLoadShader(vs, src_vert_shader);
+	myLoadShader(fs, src_frag_shader);
+
+	glDeleteShader(vs);
+	glDeleteShader(fs);
+}
+
+
 
 int main() {
+	
+	SDL_Init(SDL_INIT_VIDEO);
+	check_sdl();
+	
+		
+	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 4);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	check_sdl();
+	
+		
+	SDL_Window * win = SDL_CreateWindow("", 
+		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+		800, 600, 
+		SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE
+	);
+	check_sdl();
+	
+	SDL_GLContext ctx = SDL_GL_CreateContext(win);
+	check_sdl();
+	
 
-	using namespace sys;
-	
-	
-	Sys sys;
-	
-	sys.create_part(v3r(-1,0,0));
-	sys.create_part(v3r(+1,0,0));
-	sys.create_part(v3r(0,+1,0));
-	
-	sys.create_link(0,1, 2.2);
-	sys.create_link(1,2, 1);
-	sys.create_link(0,2, 0.9);
-	
-	
-	View view;
-	view.init();
-	
-	
-	std::vector<float> prep;
-	
-	std::vector<v3r> fs;
-	
-	// run the main loop
-	while (view.running)
+	// ------------
 	{
-		// handle events
-		view.handle_events();
-		
-		// update
-		calc_forces(fs, sys);
-		
-		// prep buffer
-		prep.clear();
-		prep.reserve(sys.links.size() * 4 * 3);
-		
-		for (auto& link: sys.links) {
-			auto& part_i = sys.parts.at(link.i);
-			auto& part_j = sys.parts.at(link.j);
-			
-			// point 1, color 1
-			emit(prep, part_i.p, v3r(1,1,1));
-			
-			// point 2, color 2
-			emit(prep, part_j.p, v3r(1,1,1));
-			
-		}
-		
-		
-		for (size_t i = 0; i < fs.size(); ++i) {
-			
-			auto& p1 = sys.parts.at(i).p;
-			auto p2 = p1 + fs.at(i);
-			
-			emit(prep, p1, v3r(0.8, 0.2, 0.8));
-			emit(prep, p2, v3r(0.8, 0.2, 0.8));
-			
-		}
-		
-		
+		init_glew();
+		CHECK_GL();
 
-		//calc_forces(fs, sys);
-		view.copy(prep);
+		auto prog = glCreateProgram();
+		CHECK_GL();	
+
+		myAttachShaders(prog, src_vert_shader, src_frag_shader);				
+		myLinkProgram(prog);
+
+		glUseProgram(prog);
+		CHECK_GL();
+
+		{
+			// vertex array data
+			GLfloat verts[] = {
+				 0.1f,  0.6f, 0.0f,
+				-0.5f, -0.5f, 0.5f,
+				 0.3f, -0.4f, 0.2f
+			};
+
+			glViewport (0, 0, 800, 600);
+
+			glClearColor ( 1.0f, 1.0f, 1.0f, 0.0f );
+			glClear(GL_COLOR_BUFFER_BIT);
+			CHECK_GL();	
+
+			//GLuint vbo[1];
+			//glGenBuffers(1, vbo);
+			//glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+			//glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 9, vVertices, GL_STATIC_DRAW);
+			
+			// vertex array meta-info
+			GLuint vao[1];
+
+			glGenVertexArrays(1, vao);
+			CHECK_GL();
+			
+			// create va with buffer
+			{
+				
+				// buffer for vertex array
+				GLuint vbo[1];
+				glGenBuffers(1, vbo);		
+				glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+				glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+				CHECK_GL();
+
+				
+				glBindVertexArray(vao[0]);
+				CHECK_GL();
+
+				// match arguments
+				glEnableVertexAttribArray(0);
+				CHECK_GL();
+				
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+				CHECK_GL();
+
+				glBindVertexArray(0);
+				
+				glDeleteBuffers(1, vbo);
+			
+			}
+			
+			glBindVertexArray(vao[0]);
+			CHECK_GL();			
+			
+			bool run = 1;
+			while (run) {
+				SDL_Event e;
+				while (SDL_PollEvent(&e)) {
+					if (e.type == SDL_QUIT) {
+						run = 0;
+					}
+				}
+
+				// drawing
+				glDrawArrays(GL_TRIANGLES, 0, 3);
+				CHECK_GL();			
+				
+				SDL_GL_SwapWindow(win);
+			}
+
+			
+			glDeleteVertexArrays(1, vao);
+
+		}
 		
-		
-		// draw
-		view.draw();
-		
-		
+		glDeleteProgram(prog);
+		CHECK_GL();	
+	   
 	}
-
+	
+	
+	SDL_GL_DeleteContext(ctx);
+	SDL_DestroyWindow(win);
+	SDL_Quit();
 	
 	return 0;
 }
+

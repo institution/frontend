@@ -1,68 +1,78 @@
+# Simple Makefile
 # $@ -- The file name of the target of the rule.
 # $* -- The stem with which an implicit rule matches
 # $< -- The name of the first prerequisite.
 # $^ -- The names of all the prerequisites
 # $(VARS:%.cpp=%.o) -- pattern replace
 
-CC:=g++-4.9
+CC:=clang++
+#CC:=emcc
 
 # output files
 OUTS:=main test
 
-# temporary dont build following files
-IGNORE_SRC:=
-
-WARNOPTS:=-Wsign-compare -Wreturn-type -Wparentheses -Wpedantic -Wconversion-null
-DEBUGOPTS:=-g -O0
-M4OPTS:=-E -P
-INCL:=-I./inc
-STD:=-std=c++14
-# -Wall -Wextra 
+# em opts
+EMOPTS:=
+EMOPTS+=-s USE_SDL=2
+EMOPTS+=-s DISABLE_EXCEPTION_CATCHING=0
+#EMOPTS+=-s SAFE_HEAP=1
+EMOPTS+=-s ASSERTIONS=1
+#EMOPTS+=-s DEMANGLE_SUPPORT=1
+#EMOPTS+=-s EXCEPTION_DEBUG=1
 
 # compiler options
-CCOPTS:=$(INCL) $(STD) -fmax-errors=5 -g -O0 ${WARNOPTS}
-
+CCOPTS:=
+CCOPTS+=-std=c++14
+CCOPTS+=-I./inc 
+#CCOPTS+=$(shell freetype-config --cflags)
+CCOPTS+=-Wsign-compare -Wreturn-type -Wparentheses -Wpedantic -Wconversion-null
+CCOPTS+=-ferror-limit=3
+CCOPTS+=-Wvla-extension
 
 # linker options
-LLOPTS:=-lsfml-graphics -lsfml-window -lsfml-system -lsfml-network -lGL -lGLEW 
+LLOPTS:=
+#LLOPTS+=$(shell freetype-config --libs)
+LLOPTS+=-lGL -lGLEW 
+LLOPTS+=-L./lib -lSDL2
+
+# common options
+CCOPTS+=-O0 -g
+LLOPTS+=-O0 -g 
+
+# environment specific
+ifeq (${CC}, emcc)
+	# emcc
+	CCOPTS+=${EMOPTS}
+	LLOPTS+=${EMOPTS}
+	OUT_EXT:=.html
+	#LLOPTS+=--preload-file res
+else
+	# clang
+	OUT_EXT:=
+endif
+
+
+default: ${OUTS}
 
 
 # assert dirs
-$(shell mkdir -p b)
-$(shell find src/ -type d | cut -c 5- | xargs -I{} mkdir -p b/{})
+$(shell mkdir -p build)
+$(shell find src/ -type d | cut -c 5- | xargs -I{} mkdir -p build/{})
 
-# list of compiled source b/fname.cpp.obj
+# list of compiled source build/obj/fname.cpp.obj
 OBJS:=$(shell find src -name '*.cpp')
-OBJS:=$(filter-out $(IGNORE_SRC),$(OBJS))
-OBJS:=$(OBJS:src/%.cpp=b/%.cpp.obj)
+OBJS:=$(OBJS:src/%.cpp=build/%.cpp.obj)
 
 -include $(OBJS:%.obj=%.d)
 
+
 # compiler
-${OBJS}: b/%.obj: src/%
+${OBJS}: build/%.obj: src/%
 	${CC} -c -MMD -MP -o $@ $< ${CCOPTS}
-	
+
 # linker
 ${OUTS}: $(OBJS)
-	${CC} -o $@ b/$@.cpp.obj  $(filter-out $(OUTS:%=b/%.cpp.obj),$(OBJS)) ${LLOPTS}
-
+	${CC} -o build/$@${OUT_EXT} build/$@.cpp.obj  $(filter-out $(OUTS:%=build/%.cpp.obj),$(OBJS)) ${LLOPTS}
 
 clean:
-	rm -rf b/*
-	
-
-# test
-#TEST_D:=$(shell g++ -MM src/test.cpp -std=c++11 | ./deps.py)
-#TEST_D:=$(TEST_D:src/%.RRR=b/%.cpp.obj)
-
-#test: ${TEST_D}
-#	${CC} -o $@ $^ ${LLOPTS}
-	
-# main
-#MAIN_D:=$(shell g++ -MM src/main.cpp -std=c++11 | ./deps.py)
-#MAIN_D:=$(MAIN_D:src/%.RRR=b/%.cpp.obj)
-
-#main: ${MAIN_D}
-#	${CC} -o $@ $^ ${LLOPTS}
-	
-	
+	rm -rf build/*
