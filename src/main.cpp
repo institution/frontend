@@ -1,9 +1,3 @@
-//#define GLM_FORCE_RADIANS
-//#include <glm/glm.hpp>
-//#include <glm/gtc/matrix_transform.hpp>
-//#include <glm/gtc/type_ptr.hpp>
-
-
 #include <stdexcept>
 #include <SDL2/SDL.h>
 #include "ext/ext.hpp"
@@ -59,7 +53,7 @@ void check_gl(char const* fname, int line=0) {
 	auto x = glGetError();
 	if (x != GL_NO_ERROR) {
 		do {
-			print(std::cerr, "ERROR at [%||:%||]: %|| (code %||)\n", fname, line, get_gl_err_msg(x), x);
+			print(std::cerr, "Error at [%||:%||]: %|| (code %||)\n", fname, line, get_gl_err_msg(x), x);
 			x = glGetError();
 		} while (x != GL_NO_ERROR);		
 		assert(0);
@@ -111,8 +105,6 @@ void myLoadShader(GLuint shader, char const* shader_src)
 		print(std::cerr, shader_src);
 		ext::fail("Error while compiling shader: %||\n", log);
 	}
-
-	
 	
 }
 
@@ -129,9 +121,6 @@ void myShowShader(GLuint shader) {
 	delete buf;
 	
 }
-
-
-
 
 
 void check_sdl() {
@@ -168,6 +157,24 @@ char const* src_frag_shader = R"QWERTY(
 )QWERTY";
 
 
+void myShowGLInfo() {
+	GLint v;
+	glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &v);
+	print("GL_MAX_VERTEX_UNIFORM_VECTORS = %||\n", v);
+	
+	glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_VECTORS, &v);
+	print("GL_MAX_FRAGMENT_UNIFORM_VECTORS = %||\n", v);
+
+	glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &v);
+	print("GL_MAX_VERTEX_ATTRIBS = %||\n", v);
+	
+	glGetIntegerv(GL_MAX_VERTEX_OUTPUT_COMPONENTS, &v);
+	print("GL_MAX_VERTEX_OUTPUT_COMPONENTS = %||\n", v);
+	
+	CHECK_GL();
+}
+
+
 void myAttachShaders(GLuint prog, char const* src_vert_shader, char const* src_frag_shader)
 {
 	auto vs = glCreateShader(GL_VERTEX_SHADER);
@@ -182,6 +189,7 @@ void myAttachShaders(GLuint prog, char const* src_vert_shader, char const* src_f
 	myLoadShader(vs, src_vert_shader);
 	myLoadShader(fs, src_frag_shader);
 
+	// will remain attached to program
 	glDeleteShader(vs);
 	glDeleteShader(fs);
 }
@@ -213,7 +221,7 @@ int main() {
 	check_sdl();
 	
 
-	// ------------
+	// OpenGL
 	{
 		init_glew();
 		CHECK_GL();
@@ -227,6 +235,7 @@ int main() {
 		glUseProgram(prog);
 		CHECK_GL();
 
+		// geometry
 		{
 			// vertex array data
 			GLfloat verts[] = {
@@ -241,11 +250,6 @@ int main() {
 			glClear(GL_COLOR_BUFFER_BIT);
 			CHECK_GL();	
 
-			//GLuint vbo[1];
-			//glGenBuffers(1, vbo);
-			//glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-			//glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 9, vVertices, GL_STATIC_DRAW);
-			
 			// vertex array meta-info
 			GLuint vao[1];
 
@@ -293,22 +297,19 @@ int main() {
 
 				// drawing
 				glDrawArrays(GL_TRIANGLES, 0, 3);
+				//glDrawArrays(GL_POINTS, 0, 3);
 				CHECK_GL();			
 				
 				SDL_GL_SwapWindow(win);
 			}
-
 			
 			glDeleteVertexArrays(1, vao);
-
 		}
 		
 		glDeleteProgram(prog);
-		CHECK_GL();	
-	   
+		CHECK_GL();		   
 	}
-	
-	
+		
 	SDL_GL_DeleteContext(ctx);
 	SDL_DestroyWindow(win);
 	SDL_Quit();
