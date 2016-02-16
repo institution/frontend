@@ -27,7 +27,7 @@ CCOPTS+=-I./inc
 #CCOPTS+=$(shell freetype-config --cflags)
 CCOPTS+=-Wsign-compare -Wreturn-type -Wparentheses -Wpedantic -Wconversion-null
 CCOPTS+=-ferror-limit=3
-CCOPTS+=-Wvla-extension
+CCOPTS+=-Wno-vla-extension
 
 # linker options
 LLOPTS:=
