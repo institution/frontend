@@ -1,5 +1,4 @@
-#include "front.hpp"
-#include "pixfont.hpp"
+#include "frontend/front.hpp"
 
 
 
@@ -39,6 +38,7 @@
 using frontend::Front;
 using frontend::Texture;
 using frontend::Color;
+using frontend::Image;
 
 int main() {
 

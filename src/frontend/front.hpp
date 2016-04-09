@@ -1,7 +1,7 @@
 #pragma once
 #include <SDL2/SDL.h>
 #include <GL/glew.h>
-#include "ext/ext.hpp"
+#include "../ext/ext.hpp"
 #include "glm.hpp"
 #include "color.hpp"
 
@@ -84,7 +84,6 @@ namespace frontend {
 		Texture make_texture(filesys::Path const& path);
 		Texture make_texture(Image const& img);
 		Texture make_texture(uint8_t const* rgba, v2s dim);
-
 		
 		PixFont make_font(filesys::Path const& path, int adv);
 
@@ -96,6 +95,8 @@ namespace frontend {
 		//void render_texture(Texture const& t, b2s trg, b2s src, Color fg);
 
 		void render_fill(b2s box, Color c);
+
+		
 
 		void stop() { done = true; }
 

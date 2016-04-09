@@ -1,6 +1,6 @@
 #include "front.hpp"
 
-#include "lodepng/lodepng.h"
+#include "../lodepng/lodepng.h"
 #include "my.hpp"
 #include "shader.hpp"
 

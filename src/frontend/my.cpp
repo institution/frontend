@@ -1,6 +1,6 @@
 #include "my.hpp"
 
-#include "ext/ext.hpp"
+#include "../ext/ext.hpp"
 
 void check_gl(char const* fname, int line) {
 	auto x = glGetError();

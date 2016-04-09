@@ -1,7 +1,7 @@
 #pragma once
 #include <iostream>
 #include <SDL2/SDL.h>
-#include "ext/ext.hpp"
+#include "../ext/ext.hpp"
 
 namespace frontend {
 		
@@ -10,8 +10,7 @@ namespace frontend {
 		
 		Color() = default;
 		Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a): r(r), g(g), b(b), a(a) {}
-		Color(uint8_t r, uint8_t g, uint8_t b): Color(r,g,b,255) {}
-		
+		Color(uint8_t r, uint8_t g, uint8_t b): Color(r,g,b,255) {}		
 	};
 
 	inline std::ostream & operator<<(std::ostream & o, Color const& c) {
